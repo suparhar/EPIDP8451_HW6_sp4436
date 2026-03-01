@@ -184,3 +184,35 @@ summary(resamps)
 bwplot(resamps)
 ```
 
+##
+SVM had the highest mean CV and mean Kappa. It is the most optimal model.
+
+### apply test data
+```{r}
+# Predictions on test set
+svm_pred_test <- predict(svm.diab, test_data)
+
+# Confusion matrix
+confusionMatrix(svm_pred_test, test_data$Diabetes, positive = "Yes")
+
+# Predicted probabilities
+svm_prob_test <- predict(svm.diab, test_data, type = "prob")
+
+# ROC curve
+roc_obj <- roc(response = test_data$Diabetes,
+               predictor = svm_prob_test[, "Yes"])
+
+# Plot ROC
+plot(roc_obj, col = "black", lwd = 2,
+     main = "ROC Curve – SVM (Test Set)")
+
+# AUC
+auc(roc_obj)
+```
+
+##
+Based on cross-validation performance, the Support Vector Machine was selected as the optimal model.When applied to the test data we had a model accuracy of 71.3%. This is lower than the NIR but that is due to class imbalance. We had a high sensitivity of 83.2%, meaning we could correctly identify most individuals with diabetes.The specificity was 69.9%, meaning moderate ability to correctly classify non-diabetic individuals. The area under the ROC curve was 0.82 meaning the model is good at differentiating. 
+
+## Question 5 Ethical Considerations of using race
+Many of the ethical concerns around race being used in prediction modeling centers around it being a socially constructed category rather than a biological determinant. This is important bc any observed associations are reflecting underlying structural factors like socioeconomic inequality, environmental exposures, healthcare access, and discrimination. If interpreted uncritically, using race may reinforce biological misconceptions or perpetuate disparities, especially if models inform resource allocation, insurance decisions, or clinical care in ways that disadvantage marginalized groups (such as the discussion we had in class about how a health system that wanted a model to choose were to cut funding). However, excluding race may reduce performance or obscure disparities that require intervention. The major challenge is with how we interpret and implement the results of models that use race. It also should not be a reason that we do not try and get better data on the underlying factors associated with race. 
+
