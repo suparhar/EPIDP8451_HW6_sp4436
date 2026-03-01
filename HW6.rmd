@@ -1,0 +1,186 @@
+---
+title: "EPIDP8451_HW6_sp4436"
+author: "Sukhman Parhar"
+date: "2026-03-01"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+```{r}
+library(tidyverse)
+library(rpart)
+library(caret)
+library(rpart.plot)
+library(pROC)
+library(kernlab)
+library(dplyr)
+library(e1071)
+library(NHANES)
+```
+
+## Question 1 Loading in the data
+
+```{r}
+# load the data
+data(NHANES)
+
+# Inspect structure
+str(NHANES)
+
+# look at first few rows
+head(NHANES)
+```
+
+# Question 2 Clean, restrict, and partition the data
+
+```{r, clean}
+# Inspect diabetes
+diabetes_struct <- str(NHANES$Diabetes)
+diabetes_tab    <- table(NHANES$Diabetes, useNA = "ifany")
+diabetes_prop   <- prop.table(diabetes_tab)
+diabetes_levels <- levels(NHANES$Diabetes)
+
+diabetes_tab
+diabetes_prop
+diabetes_levels
+
+# Keep required variables
+vars_keep <- c(
+  "Age", "Race1", "Education", "HHIncome",
+  "Pulse", "Diabetes", "BMI", "PhysActive", "Smoke100"
+)
+
+nh <- NHANES %>%
+  select(all_of(vars_keep)) %>%
+  # (C) Light cleaning
+  filter(!is.na(Diabetes)) %>%                               
+  mutate(
+    Diabetes   = factor(Diabetes, levels = c("No", "Yes")),  
+    Race1      = factor(Race1),
+    Education  = factor(Education),
+    HHIncome   = factor(HHIncome),
+    PhysActive = factor(PhysActive),
+    Smoke100   = factor(Smoke100)
+  ) %>%
+  drop_na()                                                 
+
+# Outcome balance
+table(nh$Diabetes)
+prop.table(table(nh$Diabetes))
+```
+
+##
+Since we are running logistic regression later on I will be removing weight and height to aviod collinearity. This is really only a problem in LG but I want to mantain the same predictors across models. 
+
+```{r, partition}
+set.seed(123)
+
+train_idx <- createDataPartition(y = nh$Diabetes, p = 0.70, list = FALSE)
+
+train_data <- nh %>% slice(train_idx)
+test_data  <- nh %>% slice(-train_idx)
+
+# Check balance
+prop.table(table(train_data$Diabetes))
+prop.table(table(test_data$Diabetes))
+
+# Dimensions
+dim(train_data)
+dim(test_data)
+```
+
+## Question 3: Construct 3 prediciton models 
+
+### Classification Tree
+
+```{r}
+set.seed(123)
+
+# 10-fold CV
+train.control.class <- trainControl(method="cv", number=10, sampling="down")
+
+p_grid <- expand.grid(cp = seq(0.001, 0.3, by = 0.01))
+
+tree.diab <- train(
+  Diabetes ~ .,
+  data = train_data,
+  method = "rpart",
+  metric = "Accuracy",
+  trControl = train.control.class,
+  tuneGrid = p_grid
+)
+
+tree.diab
+tree.diab$bestTune
+tree.diab$results
+
+tree.diab$finalModel %>%
+  rpart.plot()
+
+# variable importance
+varImp(tree.diab)
+
+# confusion matrix 
+confusionMatrix(tree.diab)
+```
+
+### SVC
+
+```{r}
+set.seed(123)
+
+train.control.svm <- trainControl(method="cv", number=10, classProbs=TRUE, sampling="down")
+
+svm.diab <- train(
+  Diabetes ~ .,
+  data = train_data,
+  method = "svmLinear",
+  trControl = train.control.svm,
+  preProcess = c("center", "scale"),
+  tuneGrid = expand.grid(C = seq(0.001, 2, length = 30))
+)
+
+svm.diab$bestTune
+svm.diab
+
+# confusion matrix
+confusionMatrix(svm.diab)
+
+plot(svm.diab)
+```
+
+### Logistic Regression 
+
+```{r}
+set.seed(123)
+
+train.control.lr <- trainControl(method="cv", number=10, sampling="down")
+
+log.diab <- train(
+  Diabetes ~ .,
+  data = train_data,
+  method = "glm",
+  family = "binomial",
+  trControl = train.control.lr
+)
+
+log.diab
+```
+
+## Question 4 Select optimal model
+
+```{r}
+# Compare models
+resamps <- resamples(list(
+  Tree = tree.diab,
+  SVM  = svm.diab,
+  Logistic = log.diab
+))
+
+summary(resamps)
+bwplot(resamps)
+```
+
